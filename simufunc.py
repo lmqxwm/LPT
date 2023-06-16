@@ -5,6 +5,7 @@ from itertools import permutations, combinations
 import statsmodels.formula.api as smf
 import multiprocessing as mp
 from tqdm import tqdm
+import statsmodels.stats.multitest as ssm
 
 def compute_G(Z, M = 10):
     '''Compute bin edges for continuous Z
@@ -20,7 +21,23 @@ def compute_G(Z, M = 10):
     G = np.array(pd.cut(Z, bins, labels=[x for x in range(M)]))
     return G
 
-def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont=True):
+def discretize(X, M = 10):
+    '''Discretize continuous variable X
+
+    Args: 
+        M: num of bins
+    
+    Returns:
+        new_X: (np.array) discretized X with values of midpoints in all bins
+    '''
+    bins = np.linspace(np.min(X), np.max(X), M+1)
+    mid_bins = (bins[0:-1] + bins[1:]) / 2
+    bins[0] -= 1 # pd.cut doesn't include left boundary value except add right=False
+    G = np.array(pd.cut(X, bins, labels=[x for x in range(M)]))
+    new_X = np.array([mid_bins[x] for x in G])
+    return new_X
+
+def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont_z=True, cont_xy=False):
     '''Compute testing statistic from 'Local permutation tests for conditional independence'
 
     Args:
@@ -34,6 +51,15 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont=True):
     Returns:
         T: computed testing statistic
     '''
+
+    if cont_xy:
+        MM = int(np.sqrt(M))
+        XX = discretize(X, MM)
+        YY = discretize(Y, MM)
+    else:
+        XX = X.copy()
+        YY = Y.copy()
+
     
     def phi(x, y, x_im, y_im, y_jm):
         '''Same \phi in paper'''
@@ -47,7 +73,7 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont=True):
         for temp_ind in list(perm):
             for x in range(l1):
                 for y in range(l2):
-                    h += phi(x, y, X[temp_ind[0]], Y[temp_ind[0]], Y[temp_ind[1]]) * phi(x, y, X[temp_ind[2]], Y[temp_ind[2]], Y[temp_ind[3]])
+                    h += phi(x, y, XX[temp_ind[0]], YY[temp_ind[0]], YY[temp_ind[1]]) * phi(x, y, XX[temp_ind[2]], YY[temp_ind[2]], YY[temp_ind[3]])
         h /= math.factorial(4)
         return h
     
@@ -61,15 +87,15 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont=True):
                 for y in range(l2):
                     a = 1
                     if len(w1) > 0:
-                        a *= 1 + len(np.where(np.array(w1) == x)[0])
+                        a *= 1 + len(np.where(np.array(XX[w1]) == x)[0])
                     if len(w2) > 0:
-                        a *= 1 + len(np.where(np.array(w2) == y)[0])
-                    h += phi(x, y, X[temp_ind[0]], Y[temp_ind[0]], Y[temp_ind[1]]) \
-                         * phi(x, y, X[temp_ind[2]], Y[temp_ind[2]], Y[temp_ind[3]]) / a
+                        a *= 1 + len(np.where(np.array(YY[w2]) == y)[0])
+                    h += phi(x, y, XX[temp_ind[0]], YY[temp_ind[0]], YY[temp_ind[1]]) \
+                         * phi(x, y, XX[temp_ind[2]], YY[temp_ind[2]], YY[temp_ind[3]]) / a
         h /= math.factorial(4)
         return h
     
-    if cont:
+    if cont_z:
         T = 0
         for m in range(M):
             m_ind = list(np.where(G == m)[0])
@@ -128,16 +154,32 @@ def compute_T_linear(X, Y, Z):
     '''Compute testing statistic from linear regression
 
     Args:
-        X(discrete), Y(discrete), Z(discrete or continuous): data
+        X, Y, Z: data
     
     Returns:
         T: computed testing statistic
     '''
     mod = smf.ols(formula='Y ~ X + Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
-    T = mod.params['X']
+    T = np.abs(mod.params['X'])
     return T
 
-def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont=True):
+def compute_T_double(X, Y, Z):
+    '''Compute testing statistic from double linear regression
+
+    Args:
+        X, Y, Z: data
+    
+    Returns:
+        T: computed testing statistic
+    '''
+    modx = smf.ols(formula='X ~ Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
+    mody = smf.ols(formula='Y ~ Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
+    T = np.abs(np.corrcoef(modx.resid, mody.resid)[0, 1])
+    return T
+
+
+def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont_z=True, \
+        cont_xy=False):
     '''Local permutation test
 
     Args:
@@ -160,6 +202,9 @@ def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont=True):
     T_sam_linear = compute_T_linear(X, Y, Z)
     T_per_linear = np.zeros(B)
 
+    T_sam_double = compute_T_double(X, Y, Z)
+    T_per_double = np.zeros(B)
+
     def perm_Y(Y, s):
         '''Permutate Y within each bin'''
         new_Y = Y.copy()
@@ -172,11 +217,15 @@ def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont=True):
 
     for b in range(B):
         new_Y = perm_Y(Y, b)
-        T_per[b] = compute_T(X, new_Y, Z, G, M, l1, l2, cont)
+        T_per[b] = compute_T(X, new_Y, Z, G, M, l1, l2, cont_z, cont_xy)
         T_per_linear[b] = compute_T_linear(X, new_Y, Z)
+        T_per_double[b] = compute_T_double(X, new_Y, Z)
+    
     p = (T_per >= T_sam).sum() / B
     p_linear = (T_per_linear >= T_sam_linear).sum() / B
-    return int(p <= alpha), int(p_linear <= alpha)
+    p_double = (T_per_double >= T_sam_double).sum() / B
+    #return int(p <= alpha), int(p_linear <= alpha)
+    return p, p_linear, p_double
 
 
 def data_generative1(N=100, s=1, theta=1):
@@ -263,3 +312,39 @@ def experiment4(i, N=100, M=10):
     G = np.array([int(z) for z in Z])
     r1, r2 = LPT(X, Y, Z, G, B = 40, M = M, l1 = 2, l2 = 2, alpha = 0.05, cont=False)
     return r1, r2
+
+def data_generative4(N=100, s=1, theta=1, ss=1):
+    '''Generate H0 samples with continuous Z'''
+    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+
+    def fz(Z, theta=1):
+        return np.array([np.exp(math.sin(theta * z) - np.log(4)) for z in Z])
+    
+    np.random.seed(s + ss*1000); X = np.random.binomial(1, fz(Z, theta))
+    np.random.seed(s + ss*2000); Y = np.random.binomial(1, fz(Z ,theta))
+    return X, Y, Z
+
+
+def experiment5(i, Mt=10, N=100, M=10, theta=1):
+    if i%5 == 0:
+        print(i)
+    def experiment55(ss=1, N=N, s=i, theta=theta, M=M, Mt=Mt):
+        X, Y, Z = data_generative4(N=N, s=s, theta=theta, ss=ss)
+        G = compute_G(Z, M=M)
+        r1, r2 = LPT(X, Y, Z, G, B = 40, M = M, l1 = 2, l2 = 2, alpha = 0.05/Mt)
+        return r1, r2
+    res = np.zeros([2, Mt])
+    for t in range(Mt):
+        res[:, t] = experiment55(ss=t, N=N, s=i, theta=theta, M=M)
+    r1 = int(any(ssm.multipletests(res[0,:], method="fdr_bh")[0]))
+    r2 = int(any(ssm.multipletests(res[1,:], method="fdr_bh")[0]))
+
+    return r1, r2
+
+def data_generative5(N=100, s=1, theta=1, ss=1):
+    '''Generate H0 samples with continuous Z'''
+    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+
+    np.random.seed(s + N); X = np.random.binomial(1, fz(Z, theta))
+    np.random.seed(s + ss*2000); Y = np.random.binomial(1, fz(Z ,theta))
+    return X, Y, Z

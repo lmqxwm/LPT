@@ -37,7 +37,7 @@ def discretize(X, M = 10):
     new_X = np.array([mid_bins[x] for x in G])
     return new_X
 
-def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont_z=True, cont_xy=False):
+def compute_T(X, Y, Z, G, M=10, cont_z=True, cont_xy=False):
     '''Compute testing statistic from 'Local permutation tests for conditional independence'
 
     Args:
@@ -53,13 +53,20 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont_z=True, cont_xy=False):
     '''
 
     if cont_xy:
-        MM = int(np.sqrt(M))
+        MM = np.max([int(np.sqrt(M)), 1])
         XX = discretize(X, MM)
         YY = discretize(Y, MM)
+        l1 = MM
+        l2 = MM
+        X_range = list(set(XX))
+        Y_range = list(set(YY))
     else:
         XX = X.copy()
         YY = Y.copy()
-
+        X_range = list(set(XX))
+        Y_range = list(set(YY))
+        l1 = len(set(X))
+        l2 = len(set(Y))
     
     def phi(x, y, x_im, y_im, y_jm):
         '''Same \phi in paper'''
@@ -71,8 +78,8 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont_z=True, cont_xy=False):
         perm = permutations(ind)
         h = 0
         for temp_ind in list(perm):
-            for x in range(l1):
-                for y in range(l2):
+            for x in X_range:
+                for y in Y_range:
                     h += phi(x, y, XX[temp_ind[0]], YY[temp_ind[0]], YY[temp_ind[1]]) * phi(x, y, XX[temp_ind[2]], YY[temp_ind[2]], YY[temp_ind[3]])
         h /= math.factorial(4)
         return h
@@ -83,8 +90,8 @@ def compute_T(X, Y, Z, G, M=10, l1=2, l2=2, cont_z=True, cont_xy=False):
         perm = permutations(ind)
         h = 0
         for temp_ind in list(perm):
-            for x in range(l1):
-                for y in range(l2):
+            for x in X_range:
+                for y in Y_range:
                     a = 1
                     if len(w1) > 0:
                         a *= 1 + len(np.where(np.array(XX[w1]) == x)[0])
@@ -178,7 +185,7 @@ def compute_T_double(X, Y, Z):
     return T
 
 
-def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont_z=True, \
+def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
         cont_xy=False):
     '''Local permutation test
 
@@ -196,7 +203,7 @@ def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont_z=True, \
         p1: p-value for testing statistic from compute_T
         p2: p-value for testing statistic from compute_T_linear
     '''
-    T_sam = compute_T(X, Y, Z, G, M, l1, l2, cont)
+    T_sam = compute_T(X, Y, Z, G, M, cont_z, cont_xy)
     T_per = np.zeros(B)
 
     T_sam_linear = compute_T_linear(X, Y, Z)
@@ -205,7 +212,7 @@ def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont_z=True, \
     T_sam_double = compute_T_double(X, Y, Z)
     T_per_double = np.zeros(B)
 
-    def perm_Y(Y, s):
+    def perm_Y(Y, G, s):
         '''Permutate Y within each bin'''
         new_Y = Y.copy()
         for m in range(M):
@@ -216,14 +223,24 @@ def LPT(X, Y, Z, G, B=100, M=10, l1=2, l2=2, alpha=0.05, cont_z=True, \
         return new_Y
 
     for b in range(B):
-        new_Y = perm_Y(Y, b)
-        T_per[b] = compute_T(X, new_Y, Z, G, M, l1, l2, cont_z, cont_xy)
+        new_Y = perm_Y(Y, G, b)
         T_per_linear[b] = compute_T_linear(X, new_Y, Z)
         T_per_double[b] = compute_T_double(X, new_Y, Z)
+
+    N = len(G)
+    NN = np.random.poisson(lam=N/2, size=1)
+    if NN > N:
+        p = 1.0
+    else:
+        NN_ind  = np.random.choice(N, NN, replace=False)
+        for b in range(B):
+            new_Y = perm_Y(Y[NN_ind], G[NN_ind], b)
+            T_per[b] = compute_T(X[NN_ind], new_Y, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
+        p = (T_per >= T_sam).sum() / B
     
-    p = (T_per >= T_sam).sum() / B
     p_linear = (T_per_linear >= T_sam_linear).sum() / B
     p_double = (T_per_double >= T_sam_double).sum() / B
+    
     #return int(p <= alpha), int(p_linear <= alpha)
     return p, p_linear, p_double
 
@@ -341,10 +358,19 @@ def experiment5(i, Mt=10, N=100, M=10, theta=1):
 
     return r1, r2
 
-def data_generative5(N=100, s=1, theta=1, ss=1):
+def data_generative5(N=100, s=1):
     '''Generate H0 samples with continuous Z'''
     np.random.seed(s); Z = np.random.uniform(0, 10, N)
 
-    np.random.seed(s + N); X = np.random.binomial(1, fz(Z, theta))
-    np.random.seed(s + ss*2000); Y = np.random.binomial(1, fz(Z ,theta))
+    np.random.seed(s + N); X = np.random.normal(loc=Z, scale=1, size=N)
+    np.random.seed(s + N*2); Y = np.random.normal(loc=Z, scale=1, size=N)
     return X, Y, Z
+
+def experiment6(i, N=100, M=10):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative5(N=N, s=i)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha)

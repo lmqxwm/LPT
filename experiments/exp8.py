@@ -11,10 +11,10 @@ import os
 
 if __name__ == '__main__':
     pool = mp.Pool(processes=6)
-    results = np.zeros([3, 1])
+    results = np.zeros([3, 6])
     N = 100
-    Ms = [10]
-    #Ms = [math.ceil(N**(1/10)), math.ceil(N**(1/4)), 6, math.ceil(N**(1/2)), 25, 50]
+    #Ms = [10]
+    Ms = [math.ceil(N**(1/10)), math.ceil(N**(1/4)), 6, math.ceil(N**(1/2)), 25, 50]
     print("All M:", Ms)
     with pool:
         for m in range(len(Ms)):

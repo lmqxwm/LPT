@@ -203,8 +203,6 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
         p1: p-value for testing statistic from compute_T
         p2: p-value for testing statistic from compute_T_linear
     '''
-    T_sam = compute_T(X, Y, Z, G, M, cont_z, cont_xy)
-    T_per = np.zeros(B)
 
     T_sam_linear = compute_T_linear(X, Y, Z)
     T_per_linear = np.zeros(B)
@@ -233,6 +231,8 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
         p = 1.0
     else:
         NN_ind  = np.random.choice(N, NN, replace=False)
+        T_sam = compute_T(X[NN_ind], Y[NN_ind], Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
+        T_per = np.zeros(B)
         for b in range(B):
             new_Y = perm_Y(Y[NN_ind], G[NN_ind], b)
             T_per[b] = compute_T(X[NN_ind], new_Y, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
@@ -240,7 +240,7 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     
     p_linear = (T_per_linear >= T_sam_linear).sum() / B
     p_double = (T_per_double >= T_sam_double).sum() / B
-    
+
     #return int(p <= alpha), int(p_linear <= alpha)
     return p, p_linear, p_double
 

@@ -2,10 +2,11 @@ import numpy as np
 import pandas as pd
 import math
 from itertools import permutations, combinations
-import statsmodels.formula.api as smf
+import statsmodels.api as sm
 import multiprocessing as mp
 from tqdm import tqdm
 import statsmodels.stats.multitest as ssm
+import scipy.stats as st
 
 def compute_G(Z, M = 10):
     '''Compute bin edges for continuous Z
@@ -166,8 +167,9 @@ def compute_T_linear(X, Y, Z):
     Returns:
         T: computed testing statistic
     '''
-    mod = smf.ols(formula='Y ~ X + Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
-    T = np.abs(mod.params['X'])
+    XX = sm.add_constant(np.column_stack((X, Z)))
+    mod = sm.OLS(Y, XX).fit()
+    T = mod.params[1]
     return T
 
 def compute_T_double(X, Y, Z):
@@ -179,9 +181,10 @@ def compute_T_double(X, Y, Z):
     Returns:
         T: computed testing statistic
     '''
-    modx = smf.ols(formula='X ~ Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
-    mody = smf.ols(formula='Y ~ Z', data=pd.DataFrame({'X':X, 'Y':Y, 'Z':Z})).fit()
-    T = np.abs(np.corrcoef(modx.resid, mody.resid)[0, 1])
+    ZZ = XX = sm.add_constant(Z)
+    modx = sm.OLS(X, Z).fit()
+    mody = sm.OLS(Y, Z).fit()
+    T = np.corrcoef(modx.resid, mody.resid)[0, 1]
     return T
 
 
@@ -229,6 +232,7 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     NN = np.random.poisson(lam=N/2, size=1)
     if NN > N:
         p = 1.0
+        p_two = 1.0
     else:
         NN_ind  = np.random.choice(N, NN, replace=False)
         T_sam = compute_T(X[NN_ind], Y[NN_ind], Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
@@ -237,12 +241,12 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
             new_Y = perm_Y(Y[NN_ind], G[NN_ind], b)
             T_per[b] = compute_T(X[NN_ind], new_Y, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
         p = (T_per >= T_sam).sum() / B
-    
-    p_linear = (T_per_linear >= T_sam_linear).sum() / B
-    p_double = (T_per_double >= T_sam_double).sum() / B
+        p_two = (np.abs(T_per) >= np.abs(T_sam)).sum() / B
+    p_linear = (np.abs(T_per_linear) >= np.abs(T_sam_linear)).sum() / B
+    p_double = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
 
     #return int(p <= alpha), int(p_linear <= alpha)
-    return p, p_linear, p_double
+    return p, p_two, p_linear, p_double
 
 
 def data_generative1(N=100, s=1, theta=1):
@@ -358,19 +362,103 @@ def experiment5(i, Mt=10, N=100, M=10, theta=1):
 
     return r1, r2
 
-def data_generative5(N=100, s=1):
+def data_generative5(N=100, s=1, type="normal"):
     '''Generate H0 samples with continuous Z'''
     np.random.seed(s); Z = np.random.uniform(0, 10, N)
 
-    np.random.seed(s + N); X = np.random.normal(loc=Z, scale=1, size=N)
-    np.random.seed(s + N*2); Y = np.random.normal(loc=Z, scale=1, size=N)
+    if type == "normal":
+        np.random.seed(s + N*5); X = np.random.normal(loc=Z, scale=1, size=N)
+        np.random.seed(s + N*10); Y = np.random.normal(loc=Z, scale=1, size=N)
+    if type == "normal_large":
+        np.random.seed(s + N); X = np.random.normal(loc=Z, scale=10, size=N)
+        np.random.seed(s + N*2); Y = np.random.normal(loc=Z, scale=10, size=N)
+    if type == "normal_small":
+        np.random.seed(s + N); X = np.random.normal(loc=Z, scale=.1, size=N)
+        np.random.seed(s + N*2); Y = np.random.normal(loc=Z, scale=.1, size=N)
+    if type == "chi":
+        np.random.seed(s + N); X = np.random.chisquare(df=np.floor(Z)+1, size=N)
+        np.random.seed(s + N*2); Y = np.random.chisquare(df=np.floor(Z)+1, size=N)
+    if type == "t":
+        np.random.seed(s + N); X = np.random.standard_t(df=1, size=N) + Z
+        np.random.seed(s + N*2); Y = np.random.standard_t(df=1, size=N) + Z
+    if type == "exp":
+        np.random.seed(s + N); X = np.random.exponential(scale=Z, size=N)
+        np.random.seed(s + N*2); Y = np.random.exponential(scale=Z, size=N)
+    if type == "uni":
+        np.random.seed(s + N); X = np.random.uniform(low=Z-1, high=Z+1, size=N)
+        np.random.seed(s + N*2); Y = np.random.uniform(low=Z-1, high=Z+1, size=N)
+    if type == "poi":
+        np.random.seed(s + N); X = np.random.poisson(lam=Z, size=N)
+        np.random.seed(s + N*2); Y = np.random.poisson(lam=Z, size=N)
+    if type == "skewed_normal":
+        X = st.skewnorm.rvs(a=-5, loc=Z, scale=2, size=N, random_state=s+N*5)
+        Y = st.skewnorm.rvs(a=-5, loc=Z, scale=2, size=N, random_state=s+N*10)
+    if type == "skewed_t":
+        mean = Z  # Mean
+        std_dev = 2  # Standard deviation
+        skewness = 5  # Skewness parameter
+        df = 5  # Degrees of freedom
+        t_samples = st.t.rvs(5, loc=Z, scale=2, size=N, random_state=s+N*5)
+        X = t_samples + skewness * np.sqrt((df + 1) / df) * (t_samples - mean) / std_dev
+        t_samples = st.t.rvs(5, loc=Z, scale=2, size=N, random_state=s+N*10)
+        Y = t_samples + skewness * np.sqrt((df + 1) / df) * (t_samples - mean) / std_dev
+        
     return X, Y, Z
 
-def experiment6(i, N=100, M=10):
+def data_generative6(N=100, s=1, type="normal"):
+    '''Generate H1 samples with continuous Z'''
+    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+
+    if type == "normal":
+        data = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[1, 0.5],[0.5, 1]], size=1) for z in Z])
+        X = data[:, 0]
+        Y = data[:, 1]
+    if type == "normal_large":
+        data = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[10, 5],[5, 10]], size=1) for z in Z])
+        X = data[:, 0]
+        Y = data[:, 1]
+    if type == "normal_small":
+        data = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[0.1, 0.05],[0.05, 0.1]], size=1) for z in Z])
+        X = data[:, 0]
+        Y = data[:, 1]
+    if type == "uni":
+        np.random.seed(s); data = np.random.uniform(low=Z-1, high=Z+1, size=(2, N)).T
+        X = data[:, 0]
+        Y = data[:, 1]
+    if type == "skewed_normal":
+        skewness = [2, -1]  # Skewness vector
+        normal_samples = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[1, 0.5],[0.5, 1]], size=1) for z in Z])
+        skew_samples = st.skewnorm.rvs(skewness, loc=0, scale=1, size=(N, 2))
+        skewed_normal_samples = normal_samples + skew_samples
+        X = skewed_normal_samples[:, 0]
+        Y = skewed_normal_samples[:, 1]
+    # if type == "skewed_t":
+    #     mean = Z  # Mean
+    #     cov = [[1, 0.5], [0.5, 1]]  # Covariance matrix
+    #     skewness = 5  # Skewness parameter
+    #     df = 5  # Degrees of freedom
+    #     np.random.seed(s); mv_t_samples = st.multivariate_t.rvs(df, loc=mean, scale=cov, size=1000)
+    #     mv_t_samples + np.outer(np.sqrt((df + 1) / df) * skewness, np.linalg.cholesky(cov))
+    return X, Y, Z
+
+def experiment6(i, N=100, M=10, type="normal"):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative5(N=N, s=i)
+    X, Y, Z = data_generative5(N=N, s=i, type=type)
     G = np.array([int(z) for z in Z])
-    p1, p2, p3 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True)
+    p1, p2, p3, p4 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True)
     alpha = 0.05
-    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha)
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha)
+
+def experiment7(i, N=100, M=10, type="normal"):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative6(N=N, s=i, type=type)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha)
+
+
+
+'''Markov chain'''

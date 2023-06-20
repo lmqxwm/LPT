@@ -28,7 +28,7 @@ if __name__ == '__main__':
                 print("Processing type=", types[t])
                 print("Processing M=", Ms[m])
                 result = pool.map(partial(simufunc.experiment6, N=N, M=Ms[m], type=types[t]), 
-                    [i for i in range(100)])
+                    [i for i in range(200)])
                 results[0, m] = np.mean([r[0] for r in result])
                 results[1, m] = np.mean([r[1] for r in result])
                 results[2, m] = np.mean([r[2] for r in result])

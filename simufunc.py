@@ -7,6 +7,8 @@ import multiprocessing as mp
 from tqdm import tqdm
 import statsmodels.stats.multitest as ssm
 import scipy.stats as st
+from numba import jit, njit
+from sklearn.cluster import KMeans
 
 def compute_G(Z, M = 10):
     '''Compute bin edges for continuous Z
@@ -17,9 +19,14 @@ def compute_G(Z, M = 10):
     Returns:
         G: (np.array) [len(Z)] with element of {0,1,...,M-1}
     '''
-    bins = np.linspace(np.min(Z), np.max(Z), M+1)
-    bins[0] -= 1 # pd.cut doesn't include left boundary value except add right=False
-    G = np.array(pd.cut(Z, bins, labels=[x for x in range(M)]))
+    assert len(Z.shape) < 3
+    if len(Z.shape) == 1:
+        bins = np.linspace(np.min(Z), np.max(Z), M+1)
+        bins[0] -= 1 # pd.cut doesn't include left boundary value except add right=False
+        G = np.array(pd.cut(Z, bins, labels=[x for x in range(M)]))
+    if len(Z.shape) == 2:
+        kmeans = KMeans(n_clusters=M, random_state=0).fit(Z)
+        G = kmeans.labels_
     return G
 
 def discretize(X, M = 10):
@@ -426,7 +433,7 @@ def data_generative6(N=100, s=1, type="normal"):
         X = data[:, 0]
         Y = data[:, 1]
     if type == "skewed_normal":
-        skewness = [2, -1]  # Skewness vector
+        skewness = [5, -5]  # Skewness vector
         normal_samples = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[1, 0.5],[0.5, 1]], size=1) for z in Z])
         skew_samples = st.skewnorm.rvs(skewness, loc=0, scale=1, size=(N, 2))
         skewed_normal_samples = normal_samples + skew_samples
@@ -459,6 +466,41 @@ def experiment7(i, N=100, M=10, type="normal"):
     alpha = 0.05
     return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha)
 
+def data_generative7(N=100, s=1, Nvar=8):
+    '''Markov chain'''
+    assert Nvar >= 3
+    X = np.zeros([N, Nvar])
+    np.random.seed(s); X[:, 0] = np.random.uniform(0, 10, N)
+    for v in range(Nvar):
+        if v > 0:
+            X[:, v] = np.random.normal(loc=X[:, v-1], scale=1, size=N)
+    return X
+
+def experiment8(i, N=100, M=10, Nvar=8):
+    if i%5 == 0:
+        print(i)
+    X = data_generative7(N=N, s=i*10, Nvar=Nvar)
+    result1 = np.zeros([Nvar, Nvar])
+    result2 = np.zeros([Nvar, Nvar])
+    result3 = np.zeros([Nvar, Nvar])
+    result4 = np.zeros([Nvar, Nvar])
+    alpha = 0.05
+    for x,y in combinations(np.arange(Nvar), 2):
+        temp_X = X[:, x]
+        temp_Y = X[:, y]
+        temp_Z = X[:, [np.logical_and(z!=x, z!=y) for z in range(Nvar)]]
+        G = compute_G(temp_Z)
+        p1, p2, p3, p4 = LPT(temp_X, temp_Y, temp_Z, G, B = 40, M = M, cont_z=True, cont_xy=True)
+        result1[x, y] = int(p1 <= alpha)
+        result1[y, x] = int(p1 <= alpha)
+        result2[x, y] = int(p2 <= alpha)
+        result2[y, x] = int(p2 <= alpha)
+        result3[x, y] = int(p3 <= alpha)
+        result3[y, x] = int(p3 <= alpha)
+        result4[x, y] = int(p4 <= alpha)
+        result4[y, x] = int(p4 <= alpha)
+
+    return result1, result2, result3, result4
 
 
-'''Markov chain'''
+

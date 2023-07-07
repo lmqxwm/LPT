@@ -166,7 +166,7 @@ def compute_T(X, Y, Z, G, M=10, cont_z=True, cont_xy=False):
         
 
 def compute_T_linear(X, Y, Z):
-    '''Compute testing statistic from linear regression
+    '''Compute testing statistic from linear regression Y~X+Z
 
     Args:
         X, Y, Z: data
@@ -178,6 +178,7 @@ def compute_T_linear(X, Y, Z):
     mod = sm.OLS(Y, XX).fit()
     T = mod.params[1]
     return T
+
 
 def compute_T_double(X, Y, Z):
     '''Compute testing statistic from double linear regression
@@ -196,7 +197,7 @@ def compute_T_double(X, Y, Z):
 
 
 def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
-        cont_xy=False):
+        cont_xy=False, sub=0):
     '''Local permutation test
 
     Args:
@@ -214,26 +215,59 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
         p2: p-value for testing statistic from compute_T_linear
     '''
 
-    T_sam_linear = compute_T_linear(X, Y, Z)
-    T_per_linear = np.zeros(B)
+    T_sam_linear_y = compute_T_linear(X, Y, Z)
+    T_per_linear_y = np.zeros(B)
+    T_per_linear_y_sub = np.zeros(B)
+
+    T_sam_linear_x = compute_T_linear(Y, X, Z)
+    T_per_linear_x = np.zeros(B)
+    T_per_linear_x_sub = np.zeros(B)
 
     T_sam_double = compute_T_double(X, Y, Z)
     T_per_double = np.zeros(B)
+    T_per_double_sub = np.zeros(B)
 
-    def perm_Y(Y, G, s):
-        '''Permutate Y within each bin'''
+    def perm_Y(Y, G, s, sub=0):
+        '''Permutate Y within each bin, sub:sub-partition'''
         new_Y = Y.copy()
-        for m in range(M):
-            m_ind = list(np.where(G == m)[0])
-            m_ind_new = m_ind.copy()
-            np.random.seed(s); np.random.shuffle(m_ind_new)
-            new_Y[m_ind] = new_Y[m_ind_new]
+        if sub == 0:
+            for m in range(M):
+                m_ind = list(np.where(G == m)[0])
+                m_ind_new = m_ind.copy()
+                np.random.seed(s); np.random.shuffle(m_ind_new)
+                new_Y[m_ind] = new_Y[m_ind_new]
+        elif sub > 0:
+            for m in range(M):
+                m_ind = list(np.where(G == m)[0])
+                m_ind_new = m_ind.copy()
+                np.random.seed(s); np.random.shuffle(m_ind_new)
+                n_sub = int(len(m_ind)/sub)
+                for b in range(sub):
+                    if b < sub-1:
+                        m_ind_sub = m_ind_new[(n_sub*b):(n_sub*b+b)]
+                    else:
+                        m_ind_sub = m_ind_new[(n_sub*b):]
+                    m_ind_sub_new = m_ind_sub.copy()
+                    np.random.seed(s); np.random.shuffle(m_ind_sub_new)
+                    new_Y[m_ind_sub] = new_Y[m_ind_sub_new]
+        else:
+            raise ValueError('Negative number of bins for sub-partition.') 
         return new_Y
+    
 
     for b in range(B):
         new_Y = perm_Y(Y, G, b)
-        T_per_linear[b] = compute_T_linear(X, new_Y, Z)
+        T_per_linear_x[b] = compute_T_linear(new_Y, X, Z)
+        T_per_linear_y[b] = compute_T_linear(X, new_Y, Z)
         T_per_double[b] = compute_T_double(X, new_Y, Z)
+        
+        new_Y_sub = perm_Y(Y, G, b, sub=sub)
+        T_per_linear_x_sub[b] = compute_T_linear(new_Y_sub, X, Z)
+        T_per_linear_y_sub[b] = compute_T_linear(X, new_Y_sub, Z)
+        T_per_double_sub[b] = compute_T_double(X, new_Y_sub, Z)
+
+    
+
 
     N = len(G)
     NN = np.random.poisson(lam=N/2, size=1)
@@ -244,16 +278,25 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
         NN_ind  = np.random.choice(N, NN, replace=False)
         T_sam = compute_T(X[NN_ind], Y[NN_ind], Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
         T_per = np.zeros(B)
+        T_per_sub = np.zeros(B)
         for b in range(B):
             new_Y = perm_Y(Y[NN_ind], G[NN_ind], b)
             T_per[b] = compute_T(X[NN_ind], new_Y, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
+            new_Y_sub = perm_Y(Y[NN_ind], G[NN_ind], b, sub=sub)
+            T_per_sub[b] = compute_T(X[NN_ind], new_Y_sub, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
+
         p = (T_per >= T_sam).sum() / B
-        p_two = (np.abs(T_per) >= np.abs(T_sam)).sum() / B
-    p_linear = (np.abs(T_per_linear) >= np.abs(T_sam_linear)).sum() / B
+        p_sub = (T_per_sub >= T_sam).sum() / B
+        #p_two = (np.abs(T_per) >= np.abs(T_sam)).sum() / B # the same as p
+    p_linear_x = (np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum() / B
+    p_linear_y = (np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum() / B
     p_double = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
+    p_linear_x_sub = (np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum() / B
+    p_linear_y_sub = (np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum() / B
+    p_double_sub = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
 
     #return int(p <= alpha), int(p_linear <= alpha)
-    return p, p_two, p_linear, p_double
+    return p, p_linear_x, p_linear_y, p_double, p_sub, p_linear_x_sub, p_linear_y_sub, p_double_sub
 
 
 def data_generative1(N=100, s=1, theta=1):
@@ -501,6 +544,138 @@ def experiment8(i, N=100, M=10, Nvar=8):
         result4[y, x] = int(p4 <= alpha)
 
     return result1, result2, result3, result4
+
+def experiment9(i, N=100, M=10, type="normal", sub=0):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative6(N=N, s=i, type=type)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
+
+
+
+
+def Z_to_Y(Z):
+    return Z+3*(Z**2)+2
+
+def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None):
+    '''Generate H0 samples with continuous Z'''
+    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+
+    if xfun == None:
+        Zx = Z
+    else:
+        Zx = xfun(Z)
+
+    if yfun == None:
+        Zy = Z
+    else:
+        Zy = yfun(Z)   
+
+    if hypo == "h0":
+        if type == "normal":
+            np.random.seed(s + N*2); X = np.random.normal(loc=Zx, scale=1, size=N)
+            np.random.seed(s + N*3); Y = np.random.normal(loc=Zy, scale=1, size=N)
+        elif type == "normal_large":
+            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=10, size=N)
+            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=10, size=N)
+        elif type == "normal_small":
+            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=.1, size=N)
+            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=.1, size=N)
+        elif type == "chi":
+            np.random.seed(s + N); X = np.random.chisquare(df=5, size=N) + Zx
+            np.random.seed(s + N*2); Y = np.random.chisquare(df=5, size=N) + Zy
+        elif type == "t":
+            np.random.seed(s + N); X = np.random.standard_t(df=1, size=N) + Zx
+            np.random.seed(s + N*2); Y = np.random.standard_t(df=1, size=N) + Zy
+        elif type == "exp":
+            np.random.seed(s + N); X = np.random.exponential(scale=Zx, size=N)
+            np.random.seed(s + N*2); Y = np.random.exponential(scale=Zy, size=N)
+        elif type == "uni":
+            np.random.seed(s + N); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
+            np.random.seed(s + N*2); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
+        elif type == "poi":
+            np.random.seed(s + N); X = np.random.poisson(lam=Zx, size=N)
+            np.random.seed(s + N*2); Y = np.random.poisson(lam=Zy, size=N)
+        elif type == "skewed_normal":
+            X = st.skewnorm.rvs(a=-5, loc=Zx, scale=2, size=N, random_state=s+N*5)
+            Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=2, size=N, random_state=s+N*10)
+        elif type == "skewed_t":
+            mean = Z  # Mean
+            std_dev = 2  # Standard deviation
+            skewness = 5  # Skewness parameter
+            df = 5  # Degrees of freedom
+            t_samples = st.t.rvs(5, loc=Zx, scale=2, size=N, random_state=s+N*5)
+            X = t_samples + skewness * np.sqrt((df + 1) / df) * (t_samples - mean) / std_dev
+            t_samples = st.t.rvs(5, loc=Zy, scale=2, size=N, random_state=s+N*10)
+            Y = t_samples + skewness * np.sqrt((df + 1) / df) * (t_samples - mean) / std_dev
+        else:
+            raise ValueError("Non-existing distribution type!")
+    
+    elif hypo == "h1":
+        Zxy = np.column_stack((Zx, Zy))
+        if type == "normal":
+            data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[1, 0.5],[0.5, 1]], size=1) for i in range(Zxy.shape[0])])
+            X = data[:, 0]
+            Y = data[:, 1]
+        if type == "normal_large":
+            data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[10, 5],[5, 10]], size=1) for i in range(Zxy.shape[0])])
+            X = data[:, 0]
+            Y = data[:, 1]
+        if type == "normal_small":
+            data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[0.1, 0.05],[0.05, 0.1]], size=1) for i in range(Zxy.shape[0])])
+            X = data[:, 0]
+            Y = data[:, 1]
+        if type == "uni":
+            np.random.seed(s); data = np.random.uniform(low=Zxy-1, high=Zxy+1, size=(N, 2))
+            X = data[:, 0]
+            Y = data[:, 1]
+        if type == "skewed_normal":
+            skewness = [5, -5]  # Skewness vector
+            normal_samples = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[1, 0.5],[0.5, 1]], size=1) for i in range(Zxy.shape[0])])
+            skew_samples = st.skewnorm.rvs(skewness, loc=0, scale=1, size=(N, 2))
+            skewed_normal_samples = normal_samples + skew_samples
+            X = skewed_normal_samples[:, 0]
+            Y = skewed_normal_samples[:, 1]
+        else:
+            raise ValueError("Non-existing distribution type!")
+    else:
+        raise ValueError("Non-existing Hypothesis type!")
+    # if type == "skewed_t":
+    #     mean = Z  # Mean
+    #     cov = [[1, 0.5], [0.5, 1]]  # Covariance matrix
+    #     skewness = 5  # Skewness parameter
+    #     df = 5  # Degrees of freedom
+    #     np.random.seed(s); mv_t_samples = st.multivariate_t.rvs(df, loc=mean, scale=cov, size=1000)
+    #     mv_t_samples + np.outer(np.sqrt((df + 1) / df) * skewness, np.linalg.cholesky(cov))
+    return X, Y, Z
+
+def experiment10(i, N=100, M=10, type="normal", sub=0):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h0", yfunc=Z_to_Y)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
+
+def experiment11(i, N=100, M=10, type="normal", sub=0):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h1", yfunc=Z_to_Y)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
+
+
+# both linear + dist
+# linear +dist +nonlinear
 
 
 

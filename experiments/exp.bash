@@ -1,4 +1,3 @@
-python exp4.py
-python exp1.py
-python exp6.py
-python exp5.py
+python ./experiments/exp12.py
+python ./experiments/exp13.py
+python ./experiments/exp14.py

@@ -14,9 +14,13 @@ if __name__ == '__main__':
     results = np.zeros([8, 5])
     N = 100
     #Ms = [10]
-    Ms = [math.ceil(N**(1/10)), math.ceil(N**(1/4)), 6, math.ceil(N**(1/2)), 25]
+    Ms = [math.ceil(N**(1/10)), math.ceil(N**(1/4)), 8, math.ceil(N**(1/2)), 25]
 
-    types = ["normal", "normal_large", "normal_small", "uni", "skewed_normal"]
+    types = ["normal", "normal_large", "normal_small", "skewed_normal",
+        "normal", "normal_large", "normal_small", "chi", "t", "exp", "uni", 
+        "poi", "skewed_normal", "skewed_t"]
+    hs =  ["h1"] * 4 + ["h0"] * 10
+    assert len(types) == len(hs)
     # types = ["normal", "normal_large", "normal_small", "chi", "t", "exp", "uni", 
     #     "poi", "skewed_normal", "skewed_t"]
     # for t in range(len(types)):
@@ -30,8 +34,9 @@ if __name__ == '__main__':
             for m in range(len(Ms)):
                 print("Processing type=", types[t])
                 print("Processing M=", Ms[m])
-                sub = 2
-                result = pool.map(partial(simufunc.experiment11, N=N, M=Ms[m], type=types[t], sub=sub), 
+                sub = 4
+                result = pool.map(partial(simufunc.experiment12, 
+                    N=N, M=Ms[m], type=types[t], sub=sub, hypo=hs[t], yfun=simufunc.Z_to_Y2), 
                     [i for i in range(100)])
                 results[0, m] = np.mean([r[0] for r in result])
                 results[1, m] = np.mean([r[1] for r in result])
@@ -45,5 +50,12 @@ if __name__ == '__main__':
                     columns=Ms, 
                     index=["Cor_kernel", "Linear_reg_x", "Linear_reg_y", "Double_reg",
                     "double_Cor_kernel", "Linear_reg_x_sub", "Linear_reg_y_sub", "Double_reg_sub"]).to_csv(
-                        sys.path[0]+"/results/result_sub/result_one_h1_"+types[t]+".csv")
+                        sys.path[0]+"/results/result_sub/result_two_sub"+str(sub)+hs[t]+"_"+types[t]+".csv")
+        
     pool.close()
+
+# one: x-z, y-z^2
+# two: x-z, y-logz
+# three: x-z, y-3z
+# four:x-z^2, y-logz
+# N=200/150/100 sub=2,4,5

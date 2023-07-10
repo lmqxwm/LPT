@@ -119,8 +119,8 @@ def compute_T(X, Y, Z, G, M=10, cont_z=True, cont_xy=False):
                 U = 0
                 combs = combinations(m_ind, 4)
                 combs = [x for x in combs]
-                if len(combs) > 10000:
-                    combs = [combs[i] for i in np.random.choice(len(combs), size=10000, replace=False)]
+                if len(combs) > 1000:
+                    combs = [combs[i] for i in np.random.choice(len(combs), size=1000, replace=False)]
                 count = 0
                 for ind in combs:
                     if all([ind[0] < ind[1], ind[1] < ind[2], ind[2] < ind[3]]):
@@ -145,9 +145,9 @@ def compute_T(X, Y, Z, G, M=10, cont_z=True, cont_xy=False):
                 U = 0
                 combs = combinations(m_ind, 4)
                 combs = [x for x in combs]
-                # if len(combs) > 10000:
-                #     combs = [combs[i] for i in np.random.choice(len(combs), size=10000, replace=False)]
-                # count = 0
+                if len(combs) > 1000:
+                    combs = [combs[i] for i in np.random.choice(len(combs), size=1000, replace=False)]
+                count = 0
                 for ind in combs:
                     if all([ind[0] < ind[1], ind[1] < ind[2], ind[2] < ind[3]]):
                         U += weighted_kernel(ind, w1, w2)
@@ -244,7 +244,7 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
                 n_sub = int(len(m_ind)/sub)
                 for b in range(sub):
                     if b < sub-1:
-                        m_ind_sub = m_ind_new[(n_sub*b):(n_sub*b+b)]
+                        m_ind_sub = m_ind_new[(n_sub*b):(n_sub*(b+1))]
                     else:
                         m_ind_sub = m_ind_new[(n_sub*b):]
                     m_ind_sub_new = m_ind_sub.copy()
@@ -256,7 +256,7 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     
 
     for b in range(B):
-        new_Y = perm_Y(Y, G, b)
+        new_Y = perm_Y(Y, G, b, sub=0)
         T_per_linear_x[b] = compute_T_linear(new_Y, X, Z)
         T_per_linear_y[b] = compute_T_linear(X, new_Y, Z)
         T_per_double[b] = compute_T_double(X, new_Y, Z)
@@ -291,9 +291,9 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     p_linear_x = (np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum() / B
     p_linear_y = (np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum() / B
     p_double = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
-    p_linear_x_sub = (np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum() / B
-    p_linear_y_sub = (np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum() / B
-    p_double_sub = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
+    p_linear_x_sub = (np.abs(T_per_linear_x_sub) >= np.abs(T_sam_linear_x)).sum() / B
+    p_linear_y_sub = (np.abs(T_per_linear_y_sub) >= np.abs(T_sam_linear_y)).sum() / B
+    p_double_sub = (np.abs(T_per_double_sub) >= np.abs(T_sam_double)).sum() / B
 
     #return int(p <= alpha), int(p_linear <= alpha)
     return p, p_linear_x, p_linear_y, p_double, p_sub, p_linear_x_sub, p_linear_y_sub, p_double_sub
@@ -471,10 +471,10 @@ def data_generative6(N=100, s=1, type="normal"):
         data = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[0.1, 0.05],[0.05, 0.1]], size=1) for z in Z])
         X = data[:, 0]
         Y = data[:, 1]
-    if type == "uni":
-        np.random.seed(s); data = np.random.uniform(low=Z-1, high=Z+1, size=(2, N)).T
-        X = data[:, 0]
-        Y = data[:, 1]
+    # if type == "uni":
+    #     np.random.seed(s); data = np.random.uniform(low=Z-1, high=Z+1, size=(2, N)).T
+    #     X = data[:, 0]
+    #     Y = data[:, 1]
     if type == "skewed_normal":
         skewness = [5, -5]  # Skewness vector
         normal_samples = np.array([st.multivariate_normal.rvs(mean=[z, z], cov=[[1, 0.5],[0.5, 1]], size=1) for z in Z])
@@ -555,6 +555,16 @@ def experiment9(i, N=100, M=10, type="normal", sub=0):
     return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
            int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
 
+def experiment99(i, N=100, M=10, type="normal", sub=0):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative5(N=N, s=i, type=type)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
+
 
 
 
@@ -621,19 +631,19 @@ def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None)
             data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[1, 0.5],[0.5, 1]], size=1) for i in range(Zxy.shape[0])])
             X = data[:, 0]
             Y = data[:, 1]
-        if type == "normal_large":
+        elif type == "normal_large":
             data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[10, 5],[5, 10]], size=1) for i in range(Zxy.shape[0])])
             X = data[:, 0]
             Y = data[:, 1]
-        if type == "normal_small":
+        elif type == "normal_small":
             data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[0.1, 0.05],[0.05, 0.1]], size=1) for i in range(Zxy.shape[0])])
             X = data[:, 0]
             Y = data[:, 1]
-        if type == "uni":
+        elif type == "uni":
             np.random.seed(s); data = np.random.uniform(low=Zxy-1, high=Zxy+1, size=(N, 2))
             X = data[:, 0]
             Y = data[:, 1]
-        if type == "skewed_normal":
+        elif type == "skewed_normal":
             skewness = [5, -5]  # Skewness vector
             normal_samples = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[1, 0.5],[0.5, 1]], size=1) for i in range(Zxy.shape[0])])
             skew_samples = st.skewnorm.rvs(skewness, loc=0, scale=1, size=(N, 2))
@@ -656,7 +666,7 @@ def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None)
 def experiment10(i, N=100, M=10, type="normal", sub=0):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h0", yfunc=Z_to_Y)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h0", yfun=Z_to_Y)
     G = np.array([int(z) for z in Z])
     p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05
@@ -666,7 +676,24 @@ def experiment10(i, N=100, M=10, type="normal", sub=0):
 def experiment11(i, N=100, M=10, type="normal", sub=0):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h1", yfunc=Z_to_Y)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h1", yfun=Z_to_Y)
+    G = np.array([int(z) for z in Z])
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
+
+def Z_to_Y2(Z):
+    return np.log(Z+1)-2
+
+def Z_to_Y3(Z):
+    return 3*Z
+
+
+def experiment12(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfun=None):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo=hypo, yfun=yfun)
     G = np.array([int(z) for z in Z])
     p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05
@@ -674,8 +701,16 @@ def experiment11(i, N=100, M=10, type="normal", sub=0):
            int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
 
 
-# both linear + dist
-# linear +dist +nonlinear
+# both linear + dist 3*Z
+# linear +dist +nonlinear x + 3x^2 +2 
+# log x -2
+# both nonlinear x + 3x^2 +2  log(x+1)-2
+
+# 确定sub和m。from12
+
+# 是否follow same steps
+
+
 
 
 

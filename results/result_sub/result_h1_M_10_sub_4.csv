@@ -1,9 +1,9 @@
 ,normal,normal_large,normal_small,skewed_normal
-Cor_kernel,0.32,0.39,0.41,0.2
-Linear_reg_x,1.0,1.0,1.0,1.0
-Linear_reg_y,1.0,1.0,1.0,1.0
-Double_reg,1.0,1.0,1.0,0.9
-Cor_kernel_sub,0.08,0.12,0.04,0.07
-Linear_reg_x_sub,1.0,1.0,1.0,1.0
-Linear_reg_y_sub,1.0,1.0,0.99,1.0
-Double_reg_sub,1.0,1.0,1.0,0.93
+Cor_kernel,0.09,0.18,0.06,0.11
+Linear_reg_x,1.0,1.0,1.0,0.95
+Linear_reg_y,1.0,1.0,0.97,0.94
+Double_reg,1.0,1.0,1.0,0.95
+double_Cor_kernel,0.01,0.01,0.0,0.0
+Linear_reg_x_sub,0.99,0.98,1.0,0.85
+Linear_reg_y_sub,0.98,0.98,1.0,0.84
+Double_reg_sub,0.98,0.98,1.0,0.85

@@ -12,9 +12,9 @@ import os
 if __name__ == '__main__':
     pool = mp.Pool(processes=6)
     results = np.zeros([8, 4])
-    N = 200
+    N = 100
     #Ms = [10]
-    Ms = [25]
+    Ms = [2,5, 10, 25]
 
     types = ["normal", "normal_large", "normal_small", "skewed_normal"]
     # for t in range(len(types)):
@@ -24,8 +24,10 @@ if __name__ == '__main__':
     print("All M:", Ms)
     with pool:
         for m in range(len(Ms)):
-            if Ms[m] < 25:
-                subs = [2, 4, 5]
+            if Ms[m] <= 5:
+                subs = [2, 4, 10]
+            elif Ms[m] < 25:
+                subs = [2, 4]
             else:
                 subs=[2]
             for sub in subs:
@@ -46,17 +48,19 @@ if __name__ == '__main__':
                     pd.DataFrame(results, 
                         columns=types, 
                         index=["Cor_kernel", "Linear_reg_x", "Linear_reg_y", "Double_reg",
-                        "Cor_kernel_sub", "Linear_reg_x_sub", "Linear_reg_y_sub", "Double_reg_sub"]).to_csv(
+                        "double_Cor_kernel", "Linear_reg_x_sub", "Linear_reg_y_sub", "Double_reg_sub"]).to_csv(
                             sys.path[0]+"/results/result_sub/result_h1_M_"+str(Ms[m])+"_sub_"+str(sub)+".csv")
 
         print("======================processing h0")
-        Ms = [10, 25]
+        Ms = [2,5, 10, 25]
         results = np.zeros([8, 10])
         types = ["normal", "normal_large", "normal_small", "chi", "t", "exp", "uni", 
             "poi", "skewed_normal", "skewed_t"]
         for m in range(len(Ms)):
-            if Ms[m] < 25:
-                subs = [2, 4, 5]
+            if Ms[m] <= 5:
+                subs = [2, 4, 10]
+            elif Ms[m] < 25:
+                subs = [2, 4]
             else:
                 subs=[2]
             for sub in subs:
@@ -77,6 +81,6 @@ if __name__ == '__main__':
                     pd.DataFrame(results, 
                         columns=types, 
                         index=["Cor_kernel", "Linear_reg_x", "Linear_reg_y", "Double_reg",
-                        "Cor_kernel_sub", "Linear_reg_x_sub", "Linear_reg_y_sub", "Double_reg_sub"]).to_csv(
+                        "double_Cor_kernel", "Linear_reg_x_sub", "Linear_reg_y_sub", "Double_reg_sub"]).to_csv(
                             sys.path[0]+"/results/result_sub/result_h0_M_"+str(Ms[m])+"_sub_"+str(sub)+".csv")
     pool.close()

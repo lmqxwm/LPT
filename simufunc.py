@@ -189,9 +189,9 @@ def compute_T_double(X, Y, Z):
     Returns:
         T: computed testing statistic
     '''
-    ZZ = XX = sm.add_constant(Z)
-    modx = sm.OLS(X, Z).fit()
-    mody = sm.OLS(Y, Z).fit()
+    ZZ = sm.add_constant(Z)
+    modx = sm.OLS(X, ZZ).fit()
+    mody = sm.OLS(Y, ZZ).fit()
     T = np.corrcoef(modx.resid, mody.resid)[0, 1]
     return T
 
@@ -227,41 +227,27 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     T_per_double = np.zeros(B)
     T_per_double_sub = np.zeros(B)
 
-    def perm_Y(Y, G, s, sub=0):
+    def perm_Y(YY, GG, ss, MM):
         '''Permutate Y within each bin, sub:sub-partition'''
-        new_Y = Y.copy()
-        if sub == 0:
-            for m in range(M):
-                m_ind = list(np.where(G == m)[0])
-                m_ind_new = m_ind.copy()
-                np.random.seed(s); np.random.shuffle(m_ind_new)
-                new_Y[m_ind] = new_Y[m_ind_new]
-        elif sub > 0:
-            for m in range(M):
-                m_ind = list(np.where(G == m)[0])
-                m_ind_new = m_ind.copy()
-                np.random.seed(s); np.random.shuffle(m_ind_new)
-                n_sub = int(len(m_ind)/sub)
-                for b in range(sub):
-                    if b < sub-1:
-                        m_ind_sub = m_ind_new[(n_sub*b):(n_sub*(b+1))]
-                    else:
-                        m_ind_sub = m_ind_new[(n_sub*b):]
-                    m_ind_sub_new = m_ind_sub.copy()
-                    np.random.seed(s); np.random.shuffle(m_ind_sub_new)
-                    new_Y[m_ind_sub] = new_Y[m_ind_sub_new]
-        else:
-            raise ValueError('Negative number of bins for sub-partition.') 
+        new_Y = YY.copy()
+        for m in range(MM):
+            m_ind = list(np.where(GG == m)[0])
+            m_ind_new = m_ind.copy()
+            np.random.seed(ss); np.random.shuffle(m_ind_new)
+            new_Y[m_ind] = new_Y[m_ind_new]
         return new_Y
     
 
+    subG = compute_G(Z, M*sub)
+
     for b in range(B):
-        new_Y = perm_Y(Y, G, b, sub=0)
+        new_Y = perm_Y(Y, G, b, M)
         T_per_linear_x[b] = compute_T_linear(new_Y, X, Z)
         T_per_linear_y[b] = compute_T_linear(X, new_Y, Z)
         T_per_double[b] = compute_T_double(X, new_Y, Z)
         
-        new_Y_sub = perm_Y(Y, G, b, sub=sub)
+        
+        new_Y_sub = perm_Y(Y, subG, b, M*sub)
         T_per_linear_x_sub[b] = compute_T_linear(new_Y_sub, X, Z)
         T_per_linear_y_sub[b] = compute_T_linear(X, new_Y_sub, Z)
         T_per_double_sub[b] = compute_T_double(X, new_Y_sub, Z)
@@ -274,15 +260,16 @@ def LPT(X, Y, Z, G, B=100, M=10, alpha=0.05, cont_z=True, \
     if NN > N:
         p = 1.0
         p_two = 1.0
+        p_sub = 1.0
     else:
         NN_ind  = np.random.choice(N, NN, replace=False)
         T_sam = compute_T(X[NN_ind], Y[NN_ind], Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
         T_per = np.zeros(B)
         T_per_sub = np.zeros(B)
         for b in range(B):
-            new_Y = perm_Y(Y[NN_ind], G[NN_ind], b)
+            new_Y = perm_Y(Y[NN_ind], G[NN_ind], b, M)
             T_per[b] = compute_T(X[NN_ind], new_Y, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
-            new_Y_sub = perm_Y(Y[NN_ind], G[NN_ind], b, sub=sub)
+            new_Y_sub = perm_Y(Y[NN_ind], subG[NN_ind], b, M*sub)
             T_per_sub[b] = compute_T(X[NN_ind], new_Y_sub, Z[NN_ind], G[NN_ind], M, cont_z, cont_xy)
 
         p = (T_per >= T_sam).sum() / B
@@ -548,7 +535,7 @@ def experiment8(i, N=100, M=10, Nvar=8):
 def experiment9(i, N=100, M=10, type="normal", sub=0):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative6(N=N, s=i, type=type)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h1")
     G = np.array([int(z) for z in Z])
     p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05
@@ -558,7 +545,7 @@ def experiment9(i, N=100, M=10, type="normal", sub=0):
 def experiment99(i, N=100, M=10, type="normal", sub=0):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative5(N=N, s=i, type=type)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo="h0")
     G = np.array([int(z) for z in Z])
     p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05
@@ -587,8 +574,8 @@ def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None)
 
     if hypo == "h0":
         if type == "normal":
-            np.random.seed(s + N*2); X = np.random.normal(loc=Zx, scale=1, size=N)
-            np.random.seed(s + N*3); Y = np.random.normal(loc=Zy, scale=1, size=N)
+            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=1, size=N)
+            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=1, size=N)
         elif type == "normal_large":
             np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=10, size=N)
             np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=10, size=N)
@@ -602,14 +589,14 @@ def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None)
             np.random.seed(s + N); X = np.random.standard_t(df=1, size=N) + Zx
             np.random.seed(s + N*2); Y = np.random.standard_t(df=1, size=N) + Zy
         elif type == "exp":
-            np.random.seed(s + N); X = np.random.exponential(scale=Zx, size=N)
-            np.random.seed(s + N*2); Y = np.random.exponential(scale=Zy, size=N)
+            np.random.seed(s + N); X = np.random.exponential(scale=1, size=N) + Zx
+            np.random.seed(s + N*2); Y = np.random.exponential(scale=1, size=N) + Zy
         elif type == "uni":
             np.random.seed(s + N); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
             np.random.seed(s + N*2); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
         elif type == "poi":
-            np.random.seed(s + N); X = np.random.poisson(lam=Zx, size=N)
-            np.random.seed(s + N*2); Y = np.random.poisson(lam=Zy, size=N)
+            np.random.seed(s + N); X = np.random.poisson(lam=2, size=N) + Zx
+            np.random.seed(s + N*2); Y = np.random.poisson(lam=2, size=N) + Zy
         elif type == "skewed_normal":
             X = st.skewnorm.rvs(a=-5, loc=Zx, scale=2, size=N, random_state=s+N*5)
             Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=2, size=N, random_state=s+N*10)
@@ -693,7 +680,7 @@ def Z_to_Y3(Z):
 def experiment12(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfun=None):
     if i%5 == 0:
         print(i)
-    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo=hypo, yfun=yfun)
+    X, Y, Z = data_generative8(N=N, s=i, type=type, hypo=hypo, yfun=yfun, xfun=xfun)
     G = np.array([int(z) for z in Z])
     p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05

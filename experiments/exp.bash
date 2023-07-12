@@ -1,3 +1,2 @@
-python ./experiments/exp12.py
-python ./experiments/exp13.py
-python ./experiments/exp14.py
+python ./experiments/exp15.py
+python ./experiments/exp16.py

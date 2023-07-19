@@ -574,29 +574,29 @@ def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None)
 
     if hypo == "h0":
         if type == "normal":
-            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=1, size=N)
-            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=1, size=N)
+            np.random.seed(s + N*5); X = np.random.normal(loc=Zx, scale=1, size=N)
+            np.random.seed(s + N*10); Y = np.random.normal(loc=Zy, scale=1, size=N)
         elif type == "normal_large":
-            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=10, size=N)
-            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=10, size=N)
+            np.random.seed(s + N*5); X = np.random.normal(loc=Zx, scale=10, size=N)
+            np.random.seed(s + N*10); Y = np.random.normal(loc=Zy, scale=10, size=N)
         elif type == "normal_small":
-            np.random.seed(s + N); X = np.random.normal(loc=Zx, scale=.1, size=N)
-            np.random.seed(s + N*2); Y = np.random.normal(loc=Zy, scale=.1, size=N)
+            np.random.seed(s + N*5); X = np.random.normal(loc=Zx, scale=.1, size=N)
+            np.random.seed(s + N*10); Y = np.random.normal(loc=Zy, scale=.1, size=N)
         elif type == "chi":
-            np.random.seed(s + N); X = np.random.chisquare(df=5, size=N) + Zx
-            np.random.seed(s + N*2); Y = np.random.chisquare(df=5, size=N) + Zy
+            np.random.seed(s + N*5); X = np.random.chisquare(df=5, size=N) + Zx
+            np.random.seed(s + N*10); Y = np.random.chisquare(df=5, size=N) + Zy
         elif type == "t":
-            np.random.seed(s + N); X = np.random.standard_t(df=1, size=N) + Zx
-            np.random.seed(s + N*2); Y = np.random.standard_t(df=1, size=N) + Zy
+            np.random.seed(s + N*5); X = np.random.standard_t(df=1, size=N) + Zx
+            np.random.seed(s + N*10); Y = np.random.standard_t(df=1, size=N) + Zy
         elif type == "exp":
-            np.random.seed(s + N); X = np.random.exponential(scale=1, size=N) + Zx
-            np.random.seed(s + N*2); Y = np.random.exponential(scale=1, size=N) + Zy
+            np.random.seed(s + N*5); X = np.random.exponential(scale=1, size=N) + Zx
+            np.random.seed(s + N*10); Y = np.random.exponential(scale=1, size=N) + Zy
         elif type == "uni":
-            np.random.seed(s + N); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
-            np.random.seed(s + N*2); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
+            np.random.seed(s + N*5); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
+            np.random.seed(s + N*10); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
         elif type == "poi":
-            np.random.seed(s + N); X = np.random.poisson(lam=2, size=N) + Zx
-            np.random.seed(s + N*2); Y = np.random.poisson(lam=2, size=N) + Zy
+            np.random.seed(s + N*5); X = np.random.poisson(lam=2, size=N) + Zx
+            np.random.seed(s + N*10); Y = np.random.poisson(lam=2, size=N) + Zy
         elif type == "skewed_normal":
             X = st.skewnorm.rvs(a=-5, loc=Zx, scale=2, size=N, random_state=s+N*5)
             Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=2, size=N, random_state=s+N*10)
@@ -676,13 +676,30 @@ def Z_to_Y2(Z):
 def Z_to_Y3(Z):
     return 3*Z
 
+def Z_to_Y4(Z):
+    return np.log(Z+1)+2
+
+def Z_to_Y5(Z):
+    return Z+2*Z**2+Z**3
+
+def Z_to_Y6(Z):
+    return 5/Z
+
+def Z_to_Y7(Z):
+    return 7+Z**(1/2)
+
+def Z_to_Y8(Z):
+    return -2*Z
+
+
+
 
 def experiment12(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfun=None):
     if i%5 == 0:
         print(i)
     X, Y, Z = data_generative8(N=N, s=i, type=type, hypo=hypo, yfun=yfun, xfun=xfun)
     G = np.array([int(z) for z in Z])
-    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 40, M = M, cont_z=True, cont_xy=True, sub=sub)
+    p1, p2, p3, p4, p5, p6, p7, p8 = LPT(X, Y, Z, G, B = 50, M = M, cont_z=True, cont_xy=True, sub=sub)
     alpha = 0.05
     return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
            int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)

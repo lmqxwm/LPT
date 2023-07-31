@@ -1,0 +1,9 @@
+,2,5,10,20
+Cor_kernel,0.0,0.02,0.08,0.12
+Linear_reg_x,0.21,0.34,0.4,0.12
+Linear_reg_y,0.21,0.34,0.4,0.1
+Double_reg,0.21,0.34,0.4,0.11
+double_Cor_kernel,0.0,0.0,0.02,0.0
+Linear_reg_x_sub,0.69,0.14,0.04,0.03
+Linear_reg_y_sub,0.69,0.14,0.04,0.03
+Double_reg_sub,0.69,0.14,0.04,0.03

@@ -276,7 +276,31 @@ def experiment99(i, N=100, M=10, type="normal", sub=0):
 
 
 def Z_to_Y(Z):
-    return 10*Z-(Z**2)+2
+    #return (Z**2)/2.5 - 4*Z + 12
+    return 4*(Z**2) - 4*Z -5
+
+def Z_to_Y2(Z):
+    return np.log(Z+1)-2
+
+def Z_to_Y3(Z):
+    return 5*Z
+
+def Z_to_Y4(Z):
+    return np.log(Z+1)*1.5+2
+
+def Z_to_Y5(Z):
+    return Z+2*Z**2+Z**3
+
+def Z_to_Y6(Z):
+    return 2/(Z+1)
+
+def Z_to_Y7(Z):
+    return 7+Z**(1/2)*3
+
+def Z_to_Y8(Z):
+    return -Z
+
+
 
 def data_generative8(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None):
     '''Generate H0 samples with continuous Z'''
@@ -389,27 +413,6 @@ def experiment11(i, N=100, M=10, type="normal", sub=0):
     alpha = 0.05
     return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
            int(p5 <= alpha), int(p6 <= alpha), int(p7 <= alpha), int(p8 <= alpha)
-
-def Z_to_Y2(Z):
-    return np.log(Z+1)-2
-
-def Z_to_Y3(Z):
-    return 5*Z
-
-def Z_to_Y4(Z):
-    return np.log(Z+1)+2
-
-def Z_to_Y5(Z):
-    return Z+2*Z**2+Z**3
-
-def Z_to_Y6(Z):
-    return 5/Z
-
-def Z_to_Y7(Z):
-    return 7+Z**(1/2)
-
-def Z_to_Y8(Z):
-    return -Z
 
 
 def experiment12(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfun=None):
@@ -629,6 +632,73 @@ def experiment15(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfu
     if i%5 == 0:
         print(i)
     X, Y, Z = data_generative11(N=N, s=i, type=type, hypo=hypo, yfun=yfun, xfun=xfun, cor=cor)
+    G = simufunc.compute_G(Z)
+    p1, p2, p3, p4, p5, p6 = simufunc.LPT(X, Y, Z, G, B = 100, M = M, cont_z=True, cont_xy=True, sub=sub, perm=perm)
+    alpha = 0.05
+    return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
+           int(p5 <= alpha), int(p6 <= alpha)
+
+def data_generative12(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None, cor=0.4, vx=5, vy=5):
+    '''Generate H0 samples with continuous Z'''
+    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+
+    if xfun == None:
+        Zx = Z
+    else:
+        Zx = xfun(Z)
+
+    if yfun == None:
+        Zy = Z
+    else:
+        Zy = yfun(Z)   
+
+    if hypo == "h0":
+        if type == "normal":
+            np.random.seed(s + N*1); X = np.random.normal(loc=Zx, scale=vx, size=N)
+            np.random.seed(s + N*10); Y = np.random.normal(loc=Zy, scale=vy, size=N)
+        elif type == "uni":
+            np.random.seed(s + N*50); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
+            np.random.seed(s + N*10); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
+        elif type == "poi":
+            np.random.seed(s + N*50); X = np.random.poisson(lam=2, size=N) + Zx
+            np.random.seed(s + N*10); Y = np.random.poisson(lam=2, size=N) + Zy
+        elif type == "skewed_normal":
+            X = st.skewnorm.rvs(a=-5, loc=Zx, scale=vx, size=N, random_state=s+N*1)
+            Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=vy, size=N, random_state=s+N*10)
+        else:
+            raise ValueError("Non-existing distribution type!")
+    
+    elif hypo == "h1":
+        Zxy = np.column_stack((Zx, Zy))
+        if type == "normal":
+            data = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[vx, np.sqrt(vx*vy)*cor],[np.sqrt(vx*vy)*cor, vy]], size=1) for i in range(Zxy.shape[0])])
+            X = data[:, 0]
+            Y = data[:, 1]
+        elif type == "skewed_normal":
+            skewness = [5, -5]  # Skewness vector
+            normal_samples = np.array([st.multivariate_normal.rvs(mean=Zxy[i,], cov=[[vx*0.8, np.sqrt(vx*vy)*cor*0.8],[np.sqrt(vx*vy)*cor*0.8, vy*0.8]], size=1) for i in range(Zxy.shape[0])])
+            skew_samples = st.skewnorm.rvs(skewness, loc=0, scale=[vx*0.2, vy*0.2], size=(N, 2))
+            skewed_normal_samples = normal_samples + skew_samples
+            X = skewed_normal_samples[:, 0]
+            Y = skewed_normal_samples[:, 1]
+        else:
+            raise ValueError("Non-existing distribution type!")
+    else:
+        raise ValueError("Non-existing Hypothesis type!")
+    # if type == "skewed_t":
+    #     mean = Z  # Mean
+    #     cov = [[1, 0.5], [0.5, 1]]  # Covariance matrix
+    #     skewness = 5  # Skewness parameter
+    #     df = 5  # Degrees of freedom
+    #     np.random.seed(s); mv_t_samples = st.multivariate_t.rvs(df, loc=mean, scale=cov, size=1000)
+    #     mv_t_samples + np.outer(np.sqrt((df + 1) / df) * skewness, np.linalg.cholesky(cov))
+    return X, Y, Z
+
+def experiment16(i, N=100, M=10, type="normal", sub=0, hypo="h1", \
+    xfun=None, yfun=None, perm="y", cor=0.8, vx=5, vy=5):
+    if i%5 == 0:
+        print(i)
+    X, Y, Z = data_generative12(N=N, s=i, type=type, hypo=hypo, yfun=yfun, xfun=xfun, cor=cor, vx=vx, vy=vy)
     G = simufunc.compute_G(Z)
     p1, p2, p3, p4, p5, p6 = simufunc.LPT(X, Y, Z, G, B = 100, M = M, cont_z=True, cont_xy=True, sub=sub, perm=perm)
     alpha = 0.05

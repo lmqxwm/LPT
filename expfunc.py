@@ -640,7 +640,7 @@ def experiment15(i, N=100, M=10, type="normal", sub=0, hypo="h1", xfun=None, yfu
 
 def data_generative12(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None, cor=0.4, vx=5, vy=5):
     '''Generate H0 samples with continuous Z'''
-    np.random.seed(s); Z = np.random.uniform(0, 10, N)
+    Z = np.random.uniform(0, 1, N)
 
     if xfun == None:
         Zx = Z
@@ -654,8 +654,8 @@ def data_generative12(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None
 
     if hypo == "h0":
         if type == "normal":
-            np.random.seed(s + N*1); X = np.random.normal(loc=Zx, scale=vx, size=N)
-            np.random.seed(s + N*10); Y = np.random.normal(loc=Zy, scale=vy, size=N)
+            X = np.random.normal(loc=Zx, scale=vx, size=N)
+            Y = np.random.normal(loc=Zy, scale=vy, size=N)
         elif type == "uni":
             np.random.seed(s + N*50); X = np.random.uniform(low=Zx-1, high=Zx+1, size=N)
             np.random.seed(s + N*10); Y = np.random.uniform(low=Zy-1, high=Zy+1, size=N)
@@ -663,8 +663,8 @@ def data_generative12(N=100, s=1, type="normal", hypo="h0", xfun=None, yfun=None
             np.random.seed(s + N*50); X = np.random.poisson(lam=2, size=N) + Zx
             np.random.seed(s + N*10); Y = np.random.poisson(lam=2, size=N) + Zy
         elif type == "skewed_normal":
-            X = st.skewnorm.rvs(a=-5, loc=Zx, scale=vx, size=N, random_state=s+N*1)
-            Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=vy, size=N, random_state=s+N*10)
+            X = st.skewnorm.rvs(a=-5, loc=Zx, scale=vx, size=N)
+            Y = st.skewnorm.rvs(a=-5, loc=Zy, scale=vy, size=N)
         else:
             raise ValueError("Non-existing distribution type!")
     
@@ -699,8 +699,7 @@ def experiment16(i, N=100, M=10, type="normal", sub=0, hypo="h1", \
     if i%5 == 0:
         print(i)
     X, Y, Z = data_generative12(N=N, s=i, type=type, hypo=hypo, yfun=yfun, xfun=xfun, cor=cor, vx=vx, vy=vy)
-    G = simufunc.compute_G(Z)
-    p1, p2, p3, p4, p5, p6 = simufunc.LPT(X, Y, Z, G, B = 100, M = M, cont_z=True, cont_xy=True, sub=sub, perm=perm)
+    p1, p2, p3, p4, p5, p6 = simufunc.LPT(X, Y, Z, B = 100, M = M, cont_z=True, cont_xy=True, sub=sub, perm=perm)
     alpha = 0.05
     return int(p1 <= alpha), int(p2 <= alpha), int(p3 <= alpha), int(p4 <= alpha),\
            int(p5 <= alpha), int(p6 <= alpha)

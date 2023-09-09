@@ -3,10 +3,6 @@ import pandas as pd
 import math
 from itertools import permutations, combinations
 import statsmodels.api as sm
-import multiprocessing as mp
-from tqdm import tqdm
-import scipy.stats as st
-from numba import jit, njit
 from sklearn.cluster import KMeans
 
 def compute_G(Z, M = 10):
@@ -24,17 +20,18 @@ def compute_G(Z, M = 10):
             temp_Z = Z
         else:
             temp_Z = np.random.uniform(0, 1, Z.shape[0])
-        # bins = np.linspace(np.min(temp_Z), np.max(temp_Z), M+1)
-        # bins[0] -= 1 # pd.cut doesn't include left boundary value except add right=False
-        # G = np.array(pd.cut(temp_Z, bins, labels=[x for x in range(M)]))
         percentiles = np.linspace(0, 100, M+1)
         bins = np.percentile(temp_Z, percentiles)
         bins[-1] += 1 # np.percentile doesn't include right boundary
         G = np.searchsorted(bins, temp_Z, side='right') - 1
+        Z_means = [np.mean(Z[G == g]) for g in range(M)]
+        Z_dis = np.array([Z_means[G[i]] for i in range(Z.shape[0])])
     if len(Z.shape) == 2:
         kmeans = KMeans(n_clusters=M, random_state=0).fit(Z)
         G = kmeans.labels_
-    return G
+        Z_means = kmeans.cluster_centers_
+        Z_dis = np.array([Z_means[G[i]] for i in range(Z.shape[0])])
+    return G, Z_dis
 
 def discretize(X, M = 10):
     '''Discretize continuous variable X
@@ -207,7 +204,7 @@ def compute_T_double(X, Y, Z):
     return T
 
 
-def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
+def LPT(X, Y, Z, B=100, M=10, gfunc=compute_G, cont_z=True, \
         cont_xy=False, sub=0, perm="y"):
     '''Local permutation test
 
@@ -226,19 +223,19 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
         p2: p-value for testing statistic from compute_T_linear
     '''
 
-    ZZ = discretize(Z, M)
+    G, ZZ = gfunc(Z, M)
 
     T_sam_linear_y = compute_T_linear(X, Y, ZZ)
     T_per_linear_y = np.zeros(B)
     T_sam_linear_y_z = compute_T_linear(X, Y, Z)
     T_per_linear_y_z = np.zeros(B)
-    # T_per_linear_y_sub = np.zeros(B)
+    # # T_per_linear_y_sub = np.zeros(B)
 
     T_sam_linear_x = compute_T_linear(Y, X, ZZ)
     T_per_linear_x = np.zeros(B)
     T_sam_linear_x_z = compute_T_linear(Y, X, Z)
     T_per_linear_x_z = np.zeros(B)
-    # T_per_linear_x_sub = np.zeros(B)
+    # # T_per_linear_x_sub = np.zeros(B)
 
     T_sam_double = compute_T_double(X, Y, ZZ)
     T_per_double = np.zeros(B)
@@ -246,7 +243,7 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
     T_per_double_z = np.zeros(B)
     # T_per_double_sub = np.zeros(B)
 
-    def perm_Y(YY, GG, ss, MM):
+    def _perm(YY, GG, MM):
         '''Permutate YY within each bin GG==? for M bins, sub:sub-partition, with seed ss'''
         new_Y = YY.copy()
         for m in range(MM):
@@ -256,6 +253,7 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
             np.random.shuffle(m_ind_new)
             new_Y[m_ind] = new_Y[m_ind_new]
         return new_Y
+    
     
     # def subpartition_G(GG, MM, sub, Z):
     #     subG = GG.copy()
@@ -271,7 +269,7 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
 
     for b in range(B):
         if perm == "y":
-            new_Y = perm_Y(Y, G, b, M)
+            new_Y = _perm(Y, G, M)
             T_per_linear_x[b] = compute_T_linear(new_Y, X, ZZ)
             T_per_linear_y[b] = compute_T_linear(X, new_Y, ZZ)
             T_per_double[b] = compute_T_double(X, new_Y, ZZ)
@@ -280,7 +278,7 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
             T_per_linear_y_z[b] = compute_T_linear(X, new_Y, Z)
             T_per_double_z[b] = compute_T_double(X, new_Y, Z)
         elif perm == "x":
-            new_X = perm_Y(X, G, b+B, M)
+            new_X = _perm(X, G, M)
             T_per_linear_x[b] = compute_T_linear(Y, new_X, ZZ)
             T_per_linear_y[b] = compute_T_linear(new_X, Y, ZZ)
             T_per_double[b] = compute_T_double(new_X, Y, ZZ)
@@ -320,12 +318,12 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
     #     p = (T_per >= T_sam).sum() / B
     #     # p_sub = (T_per_sub >= T_sam).sum() / B
     #     #p_two = (np.abs(T_per) >= np.abs(T_sam)).sum() / B # the same as p
-    p_linear_x = (np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum() / B
-    p_linear_y = (np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum() / B
-    p_double = (np.abs(T_per_double) >= np.abs(T_sam_double)).sum() / B
-    p_linear_x_z = (np.abs(T_per_linear_x_z) >= np.abs(T_sam_linear_x_z)).sum() / B
-    p_linear_y_z = (np.abs(T_per_linear_y_z) >= np.abs(T_sam_linear_y_z)).sum() / B
-    p_double_z = (np.abs(T_per_double_z) >= np.abs(T_sam_double_z)).sum() / B
+    p_linear_x = ((np.abs(T_per_linear_x) >= np.abs(T_sam_linear_x)).sum()+1) / (B+1)
+    p_linear_y = ((np.abs(T_per_linear_y) >= np.abs(T_sam_linear_y)).sum()+1) / (B+1)
+    p_double = ((np.abs(T_per_double) >= np.abs(T_sam_double)).sum()+1) / (B+1)
+    p_linear_x_z = ((np.abs(T_per_linear_x_z) >= np.abs(T_sam_linear_x_z)).sum()+1) / (B+1)
+    p_linear_y_z = ((np.abs(T_per_linear_y_z) >= np.abs(T_sam_linear_y_z)).sum()+1) / (B+1)
+    p_double_z = ((np.abs(T_per_double_z) >= np.abs(T_sam_double_z)).sum()+1) / (B+1)
     # p_linear_x_sub = (np.abs(T_per_linear_x_sub) >= np.abs(T_sam_linear_x)).sum() / B
     # p_linear_y_sub = (np.abs(T_per_linear_y_sub) >= np.abs(T_sam_linear_y)).sum() / B
     # p_double_sub = (np.abs(T_per_double_sub) >= np.abs(T_sam_double)).sum() / B
@@ -344,6 +342,7 @@ def LPT(X, Y, Z, G, B=100, M=10, cont_z=True, \
     #return int(p <= alpha), int(p_linear <= alpha)
     #return p, p_linear_x, p_linear_y, p_double, p_sub, p_linear_x_sub, p_linear_y_sub, p_double_sub
     return p_linear_x, p_linear_y, p_double, p_linear_x_z, p_linear_y_z, p_double_z
+    #return p_double, p_double_z
 
 
 
